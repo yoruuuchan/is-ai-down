@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# wrangler / cloudflare local state
+.wrangler/
+worker/.wrangler/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# local databases
+*.db
+*.sqlite
+*.sqlite-journal
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# archive / 设计稿 备份等不一定推
+# （这里 design_handoff_ai_status_board / yoru-and-akari Console Design System 用户可能不想推）
+# 由 STEP 3 单独决策
+HANDOFF.md
+design_handoff_ai_status_board/
+yoru-and-akari Console Design System/

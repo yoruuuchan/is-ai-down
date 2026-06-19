@@ -1,0 +1,22 @@
+{
+  "name": "ai-status-board-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute ai-status-board --local --file=./migrations/0001_init.sql",
+    "db:remote": "wrangler d1 execute ai-status-board --remote --file=./migrations/0001_init.sql",
+    "db:seed:local": "wrangler d1 execute ai-status-board --local --file=./migrations/0002_seed.sql",
+    "db:seed:remote": "wrangler d1 execute ai-status-board --remote --file=./migrations/0002_seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

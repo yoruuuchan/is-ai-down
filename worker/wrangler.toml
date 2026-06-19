@@ -1,0 +1,37 @@
+name = "ai-status-board"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Serve the Next.js static export from web/out/ as the site root,
+# while /api/* is handled by the Worker.
+# `run_worker_first = ["/api/*"]` flips precedence: assets serve first for
+# everything EXCEPT /api/*, which gets routed to the Worker first. Without
+# this, the SPA fallback (not_found_handling) would swallow /api/* and
+# return index.html instead of JSON.
+[assets]
+directory = "../web/out"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# D1 binding — created via CF API in the next task.
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-status-board"
+database_id = "0b19ef15-527e-49ba-beb9-d07be5a8e2b0"
+
+# Poll all status sources once a minute.
+[triggers]
+crons = ["*/1 * * * *"]
+
+# Custom domain — wired up via the CF dashboard or wrangler after first deploy.
+[[routes]]
+pattern = "is-ai-down.yoru-and-akari.dev"
+custom_domain = true
+
+[observability]
+enabled = true
+
+[vars]
+LOG_LEVEL = "info"

@@ -1,0 +1,385 @@
+@import "tailwindcss";
+
+/* ============================================================
+   yoru-and-akari — design tokens
+   ------------------------------------------------------------
+   akari (灯) — light, default
+   yoru  (夜) — dark
+   Source: design_handoff_ai_status_board/colors_and_type.css
+   Fonts come from next/font/google (Geist + Geist Mono) injected
+   as --font-geist-sans / --font-geist-mono in layout.tsx.
+   ============================================================ */
+
+:root {
+  --font-ui-stack:   var(--font-geist-sans), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono-stack: var(--font-geist-mono), "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-jp-stack:   "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", system-ui, sans-serif;
+
+  --text-2xs:  10px;
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   19px;
+  --text-2xl:  23px;
+  --text-3xl:  28px;
+  --text-4xl:  34px;
+  --text-5xl:  44px;
+
+  --leading-tight:   1.2;
+  --leading-snug:    1.35;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight:  -0.012em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.04em;
+  --tracking-caps:    0.08em;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --space-0:  0px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-7:  28px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  --hit-min: 44px;
+
+  --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.42, 1);
+  --dur-fast:    140ms;
+  --dur-base:    220ms;
+  --dur-slow:    420ms;
+}
+
+/* ---------- AKARI (light, default) ------------------------- */
+:root,
+[data-theme="akari"] {
+  --bg-base:      #E8ECF3;
+  --bg-surface:   #EFF2F8;
+  --bg-elevated:  #F6F8FC;
+  --bg-sunken:    #DEE3EC;
+  --bg-tint:      #F1F4FB;
+
+  --glass-bg:     hsla(220, 30%, 98%, 0.62);
+  --glass-border: hsla(225, 30%, 55%, 0.18);
+  --glass-blur:   18px;
+  --glass-sat:    140%;
+
+  --ink-1: #0E1525;
+  --ink-2: #394560;
+  --ink-3: #6B7793;
+  --ink-4: #A1ABBF;
+  --ink-on-primary: #FFFFFF;
+
+  --line-1: rgba(14, 21, 37, 0.06);
+  --line-2: rgba(14, 21, 37, 0.10);
+  --line-strong: rgba(14, 21, 37, 0.18);
+
+  --primary-50:  #EEF2FF;
+  --primary-100: #DCE3FE;
+  --primary-200: #B9C6FD;
+  --primary-300: #92A8FB;
+  --primary-400: #6E89F2;
+  --primary-500: #4F6CE8;
+  --primary-600: #3D58D4;
+  --primary-700: #2E44B0;
+  --primary-800: #233587;
+  --primary-900: #182763;
+
+  --ember-100: #FDE4D2;
+  --ember-300: #F4A488;
+  --ember-500: #D97757;
+  --ember-700: #B85B3D;
+
+  --success-100: #DCF3E8;
+  --success-500: #2BA672;
+  --success-700: #1F7E58;
+
+  --warning-100: #FBEAC9;
+  --warning-500: #D89A3A;
+  --warning-700: #A57427;
+
+  --error-100: #FADBDB;
+  --error-500: #D45D5D;
+  --error-700: #A23F3F;
+
+  --info-100: #DCE3FE;
+  --info-500: #4F6CE8;
+  --info-700: #2E44B0;
+
+  --neo-hi:      rgba(255, 255, 255, 0.95);
+  --neo-lo:      rgba(143, 158, 191, 0.45);
+  --neo-lo-soft: rgba(143, 158, 191, 0.28);
+
+  --shadow-flat:    0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(14,21,37,0.04);
+  --shadow-raised:  -4px -4px 12px var(--neo-hi), 4px 4px 14px var(--neo-lo-soft);
+  --shadow-lifted: -6px -6px 18px var(--neo-hi), 8px 8px 22px var(--neo-lo);
+  --shadow-pop:    0 10px 30px -8px rgba(20, 28, 51, 0.22), 0 2px 6px rgba(20,28,51,0.06);
+  --shadow-inset:  inset 3px 3px 6px var(--neo-lo-soft), inset -3px -3px 6px var(--neo-hi);
+  --shadow-inset-deep: inset 4px 4px 8px var(--neo-lo), inset -3px -3px 6px var(--neo-hi);
+  --shadow-focus:  0 0 0 3px rgba(79, 108, 232, 0.28);
+  --shadow-card:   0 1px 3px rgba(14,21,37,0.05);
+  --shadow-card-hover: 0 2px 8px rgba(14,21,37,0.10);
+
+  --page-wash:
+    radial-gradient(120% 80% at 80% -10%, rgba(79, 108, 232, 0.07), transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, rgba(217, 119, 87, 0.05), transparent 55%),
+    var(--bg-base);
+
+  /* pattern palette for uptime gradient generation */
+  --pal-ok: #2BA672;
+  --pal-warn: #D89A3A;
+  --pal-err: #D45D5D;
+  --pal-ember: #D97757;
+  --pal-maint: #4F6CE8;
+  --pal-unk: #C8CDD6;
+}
+
+/* ---------- YORU (dark) ------------------------------------ */
+[data-theme="yoru"] {
+  --bg-base:      #0B1020;
+  --bg-surface:   #131A2E;
+  --bg-elevated:  #1B2340;
+  --bg-sunken:    #080D1B;
+  --bg-tint:      #182146;
+
+  --glass-bg:     hsla(225, 35%, 14%, 0.62);
+  --glass-border: hsla(220, 40%, 70%, 0.10);
+  --glass-blur:   20px;
+  --glass-sat:    130%;
+
+  --ink-1: #E6EAF6;
+  --ink-2: #A8B2CC;
+  --ink-3: #6B7691;
+  --ink-4: #434D67;
+  --ink-on-primary: #0B1020;
+
+  --line-1: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.18);
+
+  --primary-50:  #1A2245;
+  --primary-100: #1F2A55;
+  --primary-200: #2A3878;
+  --primary-300: #3D52AE;
+  --primary-400: #5C76DE;
+  --primary-500: #7A95FA;
+  --primary-600: #93A9FB;
+  --primary-700: #B4C3FC;
+  --primary-800: #D6DEFD;
+  --primary-900: #ECF0FE;
+
+  --ember-100: #3A1F15;
+  --ember-300: #9A4730;
+  --ember-500: #E07B5C;
+  --ember-700: #F4A488;
+
+  --success-100: #143025;
+  --success-500: #3FCB94;
+  --success-700: #7CE0B6;
+
+  --warning-100: #3A2E14;
+  --warning-500: #ECB85F;
+  --warning-700: #F4D193;
+
+  --error-100: #3A1A1A;
+  --error-500: #F08484;
+  --error-700: #F5B0B0;
+
+  --info-100: #1F2A55;
+  --info-500: #7A95FA;
+  --info-700: #B4C3FC;
+
+  --neo-hi:      rgba(255, 255, 255, 0.05);
+  --neo-lo:      rgba(0, 0, 0, 0.55);
+  --neo-lo-soft: rgba(0, 0, 0, 0.35);
+
+  --shadow-flat:    0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.35);
+  --shadow-raised:  -3px -3px 10px var(--neo-hi), 5px 5px 16px var(--neo-lo-soft);
+  --shadow-lifted: -4px -4px 14px var(--neo-hi), 8px 8px 24px var(--neo-lo);
+  --shadow-pop:    0 14px 36px -10px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  --shadow-inset:  inset 3px 3px 7px var(--neo-lo-soft), inset -2px -2px 5px var(--neo-hi);
+  --shadow-inset-deep: inset 4px 4px 9px var(--neo-lo), inset -2px -2px 6px var(--neo-hi);
+  --shadow-focus:  0 0 0 3px rgba(122, 149, 250, 0.35);
+  --shadow-card:   0 1px 3px rgba(0,0,0,0.4);
+  --shadow-card-hover: 0 2px 8px rgba(0,0,0,0.55);
+
+  --page-wash:
+    radial-gradient(120% 80% at 80% -10%, rgba(122, 149, 250, 0.10), transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, rgba(224, 123, 92, 0.06), transparent 55%),
+    var(--bg-base);
+
+  --pal-ok: #3FCB94;
+  --pal-warn: #ECB85F;
+  --pal-err: #F08484;
+  --pal-ember: #E07B5C;
+  --pal-maint: #7A95FA;
+  --pal-unk: #434D67;
+}
+
+/* ---------- Tailwind theme bridge -------------------------- */
+@theme inline {
+  --font-sans: var(--font-ui-stack);
+  --font-mono: var(--font-mono-stack);
+}
+
+/* ---------- Base body + global animations ------------------ */
+html,
+body {
+  background: var(--bg-base);
+  color: var(--ink-1);
+  font-family: var(--font-ui-stack);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--page-wash);
+  min-height: 100vh;
+}
+
+::selection {
+  background: var(--primary-200);
+  color: var(--primary-900);
+}
+[data-theme="yoru"] ::selection {
+  background: var(--primary-300);
+  color: var(--primary-50);
+}
+
+input:focus { outline: none; }
+
+@keyframes sb-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.2; }
+}
+
+/* ---------- Card interactions ------------------------------ */
+.svc-card {
+  transition:
+    box-shadow 140ms ease,
+    border-color 140ms ease,
+    transform 100ms ease;
+}
+.svc-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--line-strong);
+}
+.svc-card:active { transform: scale(0.995); }
+
+.svc-mini {
+  transition: all 140ms ease;
+}
+
+.svc-close:hover { background: var(--bg-tint); }
+
+.chip {
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  user-select: none;
+}
+.chip:hover {
+  border-color: var(--line-strong);
+}
+.chip[data-active="true"]:hover {
+  border-color: var(--primary-500);
+}
+
+/* Native <select> doesn't inherit body font-family and ships a default chevron
+   we can't recolor — reset appearance so the box matches .chip, then paint our
+   own SVG chevron via background-image (per-theme stroke color). */
+.sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--bg-elevated);
+  color: var(--ink-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-family: var(--font-ui-stack);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 6px 26px 6px 10px;
+  height: 28px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A1ABBF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 11px 11px;
+  transition: border-color 120ms ease;
+}
+.sort-select:hover {
+  border-color: var(--line-strong);
+}
+.sort-select:focus-visible {
+  outline: none;
+  border-color: var(--primary-500);
+}
+[data-theme="yoru"] .sort-select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23434D67' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+
+.theme-btn:hover {
+  background: var(--bg-tint);
+  color: var(--ink-1);
+}
+
+.retry-btn { transition: box-shadow 160ms ease, transform 100ms ease; }
+.retry-btn:hover { box-shadow: 0 4px 14px rgba(79,108,232,0.25); }
+.retry-btn:active { transform: scale(0.97); }
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Responsive vars matching prototype ------------- */
+:root {
+  --sb-grid: repeat(3, minmax(0, 1fr));
+  --sb-pad-x: 28px;
+  --sb-stat-grid: repeat(7, minmax(0, 1fr));
+  --sb-stat-size: 24px;
+  --sb-stat-pad: 14px 16px;
+}
+@media (max-width: 960px) {
+  :root { --sb-grid: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  :root {
+    --sb-grid: repeat(1, minmax(0, 1fr));
+    --sb-pad-x: 14px;
+    --sb-stat-grid: repeat(4, minmax(0, 1fr));
+    --sb-stat-size: 18px;
+    --sb-stat-pad: 10px 12px;
+  }
+}
+@media (max-width: 420px) {
+  :root {
+    --sb-stat-grid: repeat(3, minmax(0, 1fr));
+    --sb-stat-size: 16px;
+    --sb-stat-pad: 8px 10px;
+  }
+}
