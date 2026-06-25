@@ -98,6 +98,10 @@ const lines = [
   "-- D1 wraps file execution itself; statements run one-by-one.",
   "DELETE FROM incidents;",
   "DELETE FROM status_snapshots;",
+  // 0004 migration creates these; tolerate fresh-DB runs where they don't
+  // exist yet by ignoring "no such table".
+  "DELETE FROM service_uptime;",
+  "DELETE FROM daily_uptime;",
   "DELETE FROM services;",
 ];
 
@@ -110,8 +114,14 @@ SERVICES.forEach((s, i) => {
 SERVICES.forEach((s) => {
   if (s.ago === null) return; // No snapshot → LEFT JOIN returns NULL → API emits "unknown".
   const checked = `datetime('now', '-${s.ago} minutes')`;
+  // snapshot no longer carries uptime/pattern — those live in service_uptime.
   lines.push(
-    `INSERT INTO status_snapshots (service_id, status, pattern_hint, uptime_7d, uptime_90d, endpoints_json, checked_at) VALUES (${q(s.id)}, ${q(s.st)}, ${q(s.pat)}, ${num(s.u7)}, ${num(s.u90)}, ${q(JSON.stringify(s.ep))}, ${checked});`
+    `INSERT INTO status_snapshots (service_id, status, pattern_hint, uptime_7d, uptime_90d, endpoints_json, checked_at) VALUES (${q(s.id)}, ${q(s.st)}, NULL, NULL, NULL, ${q(JSON.stringify(s.ep))}, ${checked});`
+  );
+  // Seed service_uptime so cards have non-null uptime% even before the
+  // first hourly rollup runs against fresh daily_uptime data.
+  lines.push(
+    `INSERT INTO service_uptime (service_id, uptime_7d, uptime_90d, pattern_hint, refreshed_at) VALUES (${q(s.id)}, ${num(s.u7)}, ${num(s.u90)}, ${q(s.pat)}, datetime('now'));`
   );
 });
 

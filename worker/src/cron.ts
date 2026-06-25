@@ -13,7 +13,11 @@ const STATUSPAGE_TIMEOUT_MS = 8_000;
 const PROBE_TIMEOUT_MS = 8_000;
 const PROBE_BODY_BYTES = 32_768;
 const SERVICE_CONCURRENCY = 6;
-const RETENTION_DAYS = 90;
+// snapshots are kept short-term only — uptime aggregates live in
+// daily_uptime / service_uptime now, so we don't need 90 days of raw rows.
+// 14 days gives us enough window for ad-hoc debugging without 5M+ rows.
+const SNAPSHOT_RETENTION_DAYS = 14;
+const CRON_RUNS_RETENTION_DAYS = 30;
 // Cloudflare Workers caps fetch subrequests at 50 per invocation. With ~37
 // services × (1 statuspage + 2–3 endpoints) we'd hit 150+ per tick. Stagger
 // across N ticks so each invocation polls ~37/N services (≤ ~5 fetches each).
@@ -107,9 +111,6 @@ type IncidentUpsert = {
 type ServicePollResult = {
   serviceId: string;
   status: NormalizedStatus;
-  pattern: UptimePattern;
-  uptime7d: number | null;
-  uptime90d: number | null;
   endpoints: EndpointSnapshot[];
   sourceRaw: string;
   incidents: IncidentUpsert[];
@@ -140,6 +141,7 @@ async function runScheduledPoll(
   const allServices = await loadServices(env.DB);
   // Stagger services across POLL_BATCHES ticks to stay under the
   // 50-subrequest-per-invocation Worker limit.
+  const scheduled = new Date(event.scheduledTime);
   const minute = Math.floor(event.scheduledTime / 60_000);
   const batchIndex = ((minute % POLL_BATCHES) + POLL_BATCHES) % POLL_BATCHES;
   const services = allServices.filter(
@@ -147,11 +149,18 @@ async function runScheduledPoll(
   );
 
   const results = await mapLimit(services, SERVICE_CONCURRENCY, (service) =>
-    pollService(env.DB, service, ranAt)
+    pollService(service)
   );
 
   await writePollResults(env.DB, results, ranAt);
-  await cleanupOldRows(env.DB);
+
+  // Hourly: refresh the rolled-up uptime/pattern numbers and prune.
+  // Cron fires every minute; refreshing on minute=0 keeps the cost off
+  // the hot path while keeping uptime fresh enough for a status board.
+  if (scheduled.getUTCMinutes() === 0) {
+    await refreshUptimeAggregates(env.DB);
+    await cleanupOldRows(env.DB);
+  }
 }
 
 async function loadServices(db: D1Database): Promise<ServiceRow[]> {
@@ -168,23 +177,13 @@ async function loadServices(db: D1Database): Promise<ServiceRow[]> {
   return results ?? [];
 }
 
-async function pollService(
-  db: D1Database,
-  service: ServiceRow,
-  checkedAt: string
-): Promise<ServicePollResult> {
+async function pollService(service: ServiceRow): Promise<ServicePollResult> {
   const [statuspage, probe] = await Promise.all([
     fetchStatuspage(service),
     probeEndpoints(parseEndpoints(service.endpoints_json)),
   ]);
 
   const status = chooseServiceStatus(service.source_type, statuspage, probe.status);
-  const [history7d, history90d] = await Promise.all([
-    loadStatusHistory(db, service.id, 7),
-    loadStatusHistory(db, service.id, 90),
-  ]);
-  const statuses7d = [...history7d, status];
-  const statuses90d = [...history90d, status];
 
   const endpoints = probe.endpoints.map((endpoint) => ({
     ...endpoint,
@@ -197,9 +196,6 @@ async function pollService(
   return {
     serviceId: service.id,
     status,
-    pattern: computePattern(statuses7d),
-    uptime7d: computeUptime(statuses7d),
-    uptime90d: computeUptime(statuses90d),
     endpoints,
     sourceRaw: JSON.stringify({
       statuspage: statuspage
@@ -212,7 +208,6 @@ async function pollService(
           }
         : null,
       probe: probe.raw,
-      checkedAt,
     }),
     incidents: statuspage?.incidents ?? [],
   };
@@ -225,11 +220,43 @@ async function writePollResults(
 ) {
   if (results.length === 0) return;
 
+  // status_snapshots is now a short-term debug log only — uptime_7d /
+  // uptime_90d / pattern_hint columns are kept for schema compat but
+  // populated by the hourly rollup, not per tick.
   const snapshotStmt = db.prepare(
     `
     INSERT INTO status_snapshots
       (service_id, status, pattern_hint, uptime_7d, uptime_90d, endpoints_json, checked_at, source_raw)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, NULL, NULL, NULL, ?, ?, ?)
+    `
+  );
+  // One counter row per service per Shanghai-calendar day. The +8h offset
+  // matches what daily_uptime stores and what the frontend renders, so
+  // the count rolls over at local midnight, not UTC midnight.
+  const dailyStmt = db.prepare(
+    `
+    INSERT INTO daily_uptime
+      (service_id, day, total_n, known_n,
+       n_operational, n_degraded, n_partial_outage,
+       n_major_outage, n_maintenance, n_unknown)
+    VALUES (?, date(?, '+8 hours'),
+            1,
+            CASE WHEN ? = 'unknown' THEN 0 ELSE 1 END,
+            CASE WHEN ? = 'operational'    THEN 1 ELSE 0 END,
+            CASE WHEN ? = 'degraded'       THEN 1 ELSE 0 END,
+            CASE WHEN ? = 'partial_outage' THEN 1 ELSE 0 END,
+            CASE WHEN ? = 'major_outage'   THEN 1 ELSE 0 END,
+            CASE WHEN ? = 'maintenance'    THEN 1 ELSE 0 END,
+            CASE WHEN ? = 'unknown'        THEN 1 ELSE 0 END)
+    ON CONFLICT(service_id, day) DO UPDATE SET
+      total_n = total_n + 1,
+      known_n = known_n + CASE WHEN excluded.n_unknown = 1 THEN 0 ELSE 1 END,
+      n_operational    = n_operational    + excluded.n_operational,
+      n_degraded       = n_degraded       + excluded.n_degraded,
+      n_partial_outage = n_partial_outage + excluded.n_partial_outage,
+      n_major_outage   = n_major_outage   + excluded.n_major_outage,
+      n_maintenance    = n_maintenance    + excluded.n_maintenance,
+      n_unknown        = n_unknown        + excluded.n_unknown
     `
   );
   const incidentStmt = db.prepare(
@@ -254,12 +281,22 @@ async function writePollResults(
       snapshotStmt.bind(
         result.serviceId,
         result.status,
-        result.pattern,
-        result.uptime7d,
-        result.uptime90d,
         JSON.stringify(result.endpoints),
         checkedAt,
         result.sourceRaw
+      )
+    );
+    statements.push(
+      dailyStmt.bind(
+        result.serviceId,
+        checkedAt,
+        result.status,
+        result.status,
+        result.status,
+        result.status,
+        result.status,
+        result.status,
+        result.status,
       )
     );
     for (const incident of result.incidents) {
@@ -280,26 +317,125 @@ async function writePollResults(
     }
   }
 
-  // One RPC instead of one per row — ~10 services × (1 snapshot + 0–5
-  // incidents) used to mean 10–60 sequential D1 round trips per cron tick.
+  // One RPC for snapshot + daily counter + all incident upserts.
   await db.batch(statements);
 }
 
 async function cleanupOldRows(db: D1Database) {
-  await db
-    .prepare(`DELETE FROM status_snapshots WHERE checked_at < datetime('now', ?)`)
-    .bind(`-${RETENTION_DAYS} days`)
-    .run();
-
-  await db
-    .prepare(`DELETE FROM cron_runs WHERE ran_at < datetime('now', ?)`)
-    .bind(`-${RETENTION_DAYS} days`)
-    .run();
+  await db.batch([
+    db
+      .prepare(`DELETE FROM status_snapshots WHERE checked_at < datetime('now', ?)`)
+      .bind(`-${SNAPSHOT_RETENTION_DAYS} days`),
+    db
+      .prepare(`DELETE FROM cron_runs WHERE ran_at < datetime('now', ?)`)
+      .bind(`-${CRON_RUNS_RETENTION_DAYS} days`),
+    // Keep 91 days of daily_uptime so the 90-day rollup always has a full
+    // window of data (one extra day of cushion for timezone edges).
+    db
+      .prepare(`DELETE FROM daily_uptime WHERE day < date('now', '+8 hours', '-91 days')`),
+  ]);
 }
 
 async function cleanupSeedRows(db: D1Database) {
   await db.prepare(`DELETE FROM status_snapshots WHERE source_raw IS NULL`).run();
   await db.prepare(`DELETE FROM incidents WHERE id LIKE 'seed-%'`).run();
+}
+
+// Recomputed once per hour from daily_uptime. Reads ~91 rows per service
+// (vs ~129600 status_snapshots before), so this is cheap even at scale.
+// The reader joins service_uptime; nothing here touches status_snapshots.
+async function refreshUptimeAggregates(db: D1Database) {
+  // Pull the rolled-up data first so we can compute pattern_hint client-side
+  // (SQLite alone can't express the "pattern from sequence of statuses" logic
+  // cleanly). 7d window is used for pattern because the prototype visual was
+  // designed around recent behavior, not long-term.
+  const { results } = await db
+    .prepare(
+      `
+      SELECT
+        s.id AS service_id,
+        (SELECT
+          CASE WHEN SUM(known_n) > 0
+            THEN (SUM(n_operational + n_maintenance + n_degraded)
+                  + 0.5 * SUM(n_partial_outage)) * 1.0 / SUM(known_n)
+            ELSE NULL END
+         FROM daily_uptime du
+         WHERE du.service_id = s.id
+           AND du.day >= date('now', '+8 hours', '-7 days')
+        ) AS uptime_7d,
+        (SELECT
+          CASE WHEN SUM(known_n) > 0
+            THEN (SUM(n_operational + n_maintenance + n_degraded)
+                  + 0.5 * SUM(n_partial_outage)) * 1.0 / SUM(known_n)
+            ELSE NULL END
+         FROM daily_uptime du
+         WHERE du.service_id = s.id
+           AND du.day >= date('now', '+8 hours', '-90 days')
+        ) AS uptime_90d,
+        (SELECT SUM(n_operational)    FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_ok7,
+        (SELECT SUM(n_degraded)       FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_deg7,
+        (SELECT SUM(n_partial_outage) FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_part7,
+        (SELECT SUM(n_major_outage)   FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_maj7,
+        (SELECT SUM(n_maintenance)    FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_maint7,
+        (SELECT SUM(n_unknown)        FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS n_unk7,
+        (SELECT SUM(total_n)          FROM daily_uptime du
+           WHERE du.service_id = s.id AND du.day >= date('now', '+8 hours', '-7 days')) AS total7
+      FROM services s
+      `
+    )
+    .all<{
+      service_id: string;
+      uptime_7d: number | null;
+      uptime_90d: number | null;
+      n_ok7: number | null;
+      n_deg7: number | null;
+      n_part7: number | null;
+      n_maj7: number | null;
+      n_maint7: number | null;
+      n_unk7: number | null;
+      total7: number | null;
+    }>();
+
+  if (!results || results.length === 0) return;
+
+  const refreshedAt = new Date().toISOString();
+  const upsert = db.prepare(
+    `
+    INSERT INTO service_uptime (service_id, uptime_7d, uptime_90d, pattern_hint, refreshed_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(service_id) DO UPDATE SET
+      uptime_7d    = excluded.uptime_7d,
+      uptime_90d   = excluded.uptime_90d,
+      pattern_hint = excluded.pattern_hint,
+      refreshed_at = excluded.refreshed_at
+    `
+  );
+
+  const statements = results.map((row) =>
+    upsert.bind(
+      row.service_id,
+      row.uptime_7d,
+      row.uptime_90d,
+      computePatternFromCounts({
+        operational: row.n_ok7 ?? 0,
+        degraded: row.n_deg7 ?? 0,
+        partial_outage: row.n_part7 ?? 0,
+        major_outage: row.n_maj7 ?? 0,
+        maintenance: row.n_maint7 ?? 0,
+        unknown: row.n_unk7 ?? 0,
+        total: row.total7 ?? 0,
+      }),
+      refreshedAt,
+    )
+  );
+
+  await db.batch(statements);
 }
 
 // Dispatch to a platform-specific adapter based on the service's source_type.
@@ -1163,51 +1299,25 @@ function mapIncidentSeverity(
   return "unknown";
 }
 
-async function loadStatusHistory(
-  db: D1Database,
-  serviceId: string,
-  days: 7 | 90
-): Promise<NormalizedStatus[]> {
-  const { results } = await db
-    .prepare(
-      `
-      SELECT status
-      FROM status_snapshots
-      WHERE service_id = ?
-        AND checked_at >= datetime('now', ?)
-      ORDER BY checked_at ASC
-      `
-    )
-    .bind(serviceId, `-${days} days`)
-    .all<{ status: NormalizedStatus }>();
-
-  return (results ?? []).map((row) => row.status);
-}
-
-function computePattern(statuses: NormalizedStatus[]): UptimePattern {
-  if (statuses.length === 0 || statuses.every((s) => s === "unknown")) return "unknown";
-  if (statuses.every((s) => s === "operational")) return "perfect";
-  if (statuses.includes("maintenance")) return "maintenance";
-  if (statuses.includes("major_outage")) return "recent_issue";
-  if (statuses.some((s) => s === "partial_outage" || s === "degraded")) {
-    return "some_issues";
-  }
-  if (new Set(statuses).size > 1) return "scattered";
-  return "unknown";
-}
-
-function computeUptime(statuses: NormalizedStatus[]): number | null {
-  const known = statuses.filter((s) => s !== "unknown");
-  if (known.length === 0) return null;
-
-  const score = known.reduce((sum, status) => {
-    if (status === "operational" || status === "maintenance") return sum + 1;
-    if (status === "degraded") return sum + 1;
-    if (status === "partial_outage") return sum + 0.5;
-    return sum;
-  }, 0);
-
-  return round4(score / known.length);
+// Same heuristics as the old per-snapshot computePattern, but driven by
+// aggregate counts instead of a list of statuses. Matches the behavior
+// frontend gradients were designed against in the prototype.
+function computePatternFromCounts(c: {
+  operational: number;
+  degraded: number;
+  partial_outage: number;
+  major_outage: number;
+  maintenance: number;
+  unknown: number;
+  total: number;
+}): UptimePattern {
+  if (c.total === 0 || c.unknown === c.total) return "unknown";
+  if (c.major_outage > 0) return "recent_issue";
+  if (c.maintenance > 0) return "maintenance";
+  if (c.partial_outage > 0 || c.degraded > 0) return "some_issues";
+  if (c.operational === c.total) return "perfect";
+  // mixed operational + unknown — visible but not a full perfect run
+  return "scattered";
 }
 
 function parseEndpoints(raw: string): ProbeUrl[] {
@@ -1276,10 +1386,6 @@ function stableIncidentId(title: string, startedAt: string): string {
     hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
   }
   return `generated-${hash.toString(16)}`;
-}
-
-function round4(value: number): number {
-  return Math.round(value * 10_000) / 10_000;
 }
 
 function stringifyError(error: unknown): string {

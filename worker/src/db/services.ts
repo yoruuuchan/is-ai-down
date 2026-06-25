@@ -23,13 +23,15 @@ type ServiceRow = {
   status_page_url: string;
   source_type: StatusSourceType;
   endpoints_json: string;
-  // From latest snapshot:
+  // Latest status comes from the freshest snapshot; uptime + pattern come
+  // from the hourly-refreshed service_uptime rollup. Splitting these means
+  // /api/services never scans status_snapshots beyond MAX(checked_at).
   status: NormalizedStatus | null;
+  endpoints_snapshot_json: string | null;
+  last_checked: string | null;
   pattern_hint: UptimePattern | null;
   uptime_7d: number | null;
   uptime_90d: number | null;
-  endpoints_snapshot_json: string | null;
-  last_checked: string | null;
 };
 
 export async function getServicesWithLatestStatus(db: D1Database): Promise<Service[]> {
@@ -41,10 +43,10 @@ export async function getServicesWithLatestStatus(db: D1Database): Promise<Servi
         s.brand_color, s.avatar_text, s.initial,
         s.status_page, s.status_page_url, s.source_type,
         s.endpoints_json,
-        latest.status, latest.pattern_hint,
-        latest.uptime_7d, latest.uptime_90d,
+        latest.status,
         latest.endpoints_json AS endpoints_snapshot_json,
-        latest.checked_at AS last_checked
+        latest.checked_at AS last_checked,
+        u.pattern_hint, u.uptime_7d, u.uptime_90d
       FROM services s
       LEFT JOIN (
         SELECT ss.* FROM status_snapshots ss
@@ -55,6 +57,7 @@ export async function getServicesWithLatestStatus(db: D1Database): Promise<Servi
           ON ss.service_id = li.service_id
          AND ss.checked_at = li.max_checked
       ) latest ON latest.service_id = s.id
+      LEFT JOIN service_uptime u ON u.service_id = s.id
       ORDER BY s.sort_order ASC, s.id ASC
       `
     )

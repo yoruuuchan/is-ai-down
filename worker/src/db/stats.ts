@@ -15,6 +15,9 @@ export async function getStats(db: D1Database): Promise<{
   counts: Record<NormalizedStatus, number>;
   last_updated: string | null;
 }> {
+  // The self-join here only reads the latest snapshot per service (one row
+  // per group); reads scale with services, not retention window — fine
+  // even after status_snapshots starts accumulating again.
   const { results } = await db
     .prepare(
       `
