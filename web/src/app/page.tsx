@@ -83,17 +83,29 @@ export default function HomePage() {
     }
   }, []);
 
-  // First load (only when not in a demo state override). Effect-driven
-  // setState here is intentional: this is the standard "fetch external data
-  // on mount, store in React state" pattern that the lint rule warns about
-  // but explicitly allows as a callback-driven subscription.
+  // Retry/manual refresh shares the same AbortController as the mount-time
+  // load so a click during a stale in-flight request cancels the old fetch
+  // and avoids racing two setState calls. The cleanup-on-unmount semantics
+  // come for free since useEffect's teardown calls abort.
+  const fetchAbort = useRef<AbortController | null>(null);
+  const triggerLoad = useCallback(() => {
+    fetchAbort.current?.abort();
+    const ac = new AbortController();
+    fetchAbort.current = ac;
+    return loadData(ac.signal);
+  }, [loadData]);
+
+  // First load (only when not in a demo state override). The set-state-in-
+  // effect lint rule flags this pattern (fetch on mount → store in state),
+  // but it's the canonical shape for "subscribe to an external source" — we
+  // suppress the rule rather than reach for useSyncExternalStore for a
+  // one-shot fetch.
   useEffect(() => {
     if (demoState !== "live") return;
-    const ac = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData(ac.signal);
-    return () => ac.abort();
-  }, [demoState, loadData]);
+    triggerLoad();
+    return () => fetchAbort.current?.abort();
+  }, [demoState, triggerLoad]);
 
   // 60s countdown — silent refresh on tick.
   const refreshInFlight = useRef(false);
@@ -104,7 +116,7 @@ export default function HomePage() {
         if (prev <= 1) {
           if (!refreshInFlight.current) {
             refreshInFlight.current = true;
-            loadData().finally(() => {
+            triggerLoad().finally(() => {
               refreshInFlight.current = false;
             });
           }
@@ -114,7 +126,7 @@ export default function HomePage() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [demoState, loadData]);
+  }, [demoState, triggerLoad]);
 
   // Reset expansion alongside search/filter — handled at the setter so we
   // don't need an effect (React 19 rule: avoid setState-in-effect cascades).
@@ -178,7 +190,7 @@ export default function HomePage() {
 
   const handleRetry = () => {
     setFetchError(null);
-    loadData();
+    triggerLoad();
   };
 
   // Resolved view state — demo override wins, otherwise derive from fetch.
