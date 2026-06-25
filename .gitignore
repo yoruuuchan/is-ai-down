@@ -21,6 +21,9 @@ worker/.wrangler/
 *.sqlite
 *.sqlite-journal
 
+# D1 backups (created by wrangler d1 export or the CF API)
+worker/backups/
+
 # logs
 *.log
 npm-debug.log*
