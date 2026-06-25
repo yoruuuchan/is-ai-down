@@ -39,12 +39,15 @@ export async function getRecentIncidents(
 }
 
 export async function countTodayEvents(db: D1Database): Promise<number> {
-  // "Today" = same UTC date as now. Using date() sidesteps the format
-  // mismatch you get from comparing SQLite's "YYYY-MM-DD HH:MM:SS" against
-  // a strftime() literal — same issue that hits the relative-time formatter.
+  // "Today" = same Asia/Shanghai calendar date as now. The frontend renders
+  // incident times in CST via formatRelativeIncidentZh, so the count must
+  // agree with what users see — using UTC here would mark a 01:00 CST event
+  // (17:00 UTC the previous day) as "yesterday" while the row above it still
+  // says "今天 01:00". SQLite stores naive UTC, so shift by +8h before date().
   const row = await db
     .prepare(
-      `SELECT COUNT(*) AS n FROM incidents WHERE date(updated_at) = date('now')`
+      `SELECT COUNT(*) AS n FROM incidents
+       WHERE date(updated_at, '+8 hours') = date('now', '+8 hours')`
     )
     .first<{ n: number }>();
   return row?.n ?? 0;
