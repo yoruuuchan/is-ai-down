@@ -1,4 +1,4 @@
-import { formatRelativeIncidentZh } from "../format";
+import { toUtcIso } from "../format";
 import type { Incident, IncidentSeverity, IncidentStatus } from "./types";
 
 type IncidentRow = {
@@ -28,10 +28,11 @@ export async function getRecentIncidents(
     .bind(limit)
     .all<IncidentRow>();
 
-  const now = new Date();
   return (results ?? []).map((r) => ({
     service: r.service_name,
-    time: formatRelativeIncidentZh(r.updated_at, now),
+    // ISO with explicit Z. Frontend renders relative to its own clock and
+    // locale; the API stays display-format-neutral.
+    time: toUtcIso(r.updated_at) ?? r.updated_at,
     desc: r.title,
     incStatus: r.inc_status,
     severity: r.severity,
@@ -40,10 +41,11 @@ export async function getRecentIncidents(
 
 export async function countTodayEvents(db: D1Database): Promise<number> {
   // "Today" = same Asia/Shanghai calendar date as now. The frontend renders
-  // incident times in CST via formatRelativeIncidentZh, so the count must
-  // agree with what users see — using UTC here would mark a 01:00 CST event
-  // (17:00 UTC the previous day) as "yesterday" while the row above it still
-  // says "今天 01:00". SQLite stores naive UTC, so shift by +8h before date().
+  // incident times in CST (see formatRelativeIncident in web/src/lib/i18n),
+  // so the count must agree with what users see — using UTC here would mark
+  // a 01:00 CST event (17:00 UTC the previous day) as "yesterday" while the
+  // row above it still says "今天 01:00". SQLite stores naive UTC; shift by
+  // +8h before date().
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM incidents

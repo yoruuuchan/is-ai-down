@@ -1,4 +1,4 @@
-import { formatRelativeZh, formatUptimePct } from "../format";
+import { toUtcIso } from "../format";
 import type {
   NormalizedStatus,
   ProbeUrl,
@@ -63,7 +63,6 @@ export async function getServicesWithLatestStatus(db: D1Database): Promise<Servi
     )
     .all<ServiceRow>();
 
-  const now = new Date();
   return (results ?? []).map((r) => {
     // Prefer the per-tick endpoint statuses from the latest snapshot; fall
     // back to the static endpoint list on the service row.
@@ -80,9 +79,9 @@ export async function getServicesWithLatestStatus(db: D1Database): Promise<Servi
       priority: r.priority,
       status: (r.status ?? "unknown") as NormalizedStatus,
       pattern: (r.pattern_hint ?? "unknown") as UptimePattern,
-      uptime7d: formatUptimePct(r.uptime_7d),
-      uptime90d: formatUptimePct(r.uptime_90d),
-      lastUpdate: formatRelativeZh(r.last_checked, now),
+      uptime7d: r.uptime_7d,
+      uptime90d: r.uptime_90d,
+      lastUpdate: toUtcIso(r.last_checked),
       brandColor: r.brand_color,
       avatarText: r.avatar_text,
       initial: r.initial,

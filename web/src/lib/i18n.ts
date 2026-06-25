@@ -337,32 +337,119 @@ export function useProbeLabel(): (label: string) => string {
 
 // --- Relative time helpers -------------------------------------------------
 //
-// Worker emits Chinese-formatted strings (e.g. "3 分钟前", "今天 14:23"). We
-// parse them back into a structured shape and re-render in the active locale.
-// "MM-DD" / "MM-DD HH:MM" / unrecognized strings pass through untouched —
-// they're language-neutral numerals.
+// API returns ISO-8601 timestamps; the frontend formats them relative to the
+// viewer's clock and the active locale. Two granularity levels:
+//   formatRelative          — "5 分钟前" / "5 min ago"  (Service.lastUpdate)
+//   formatRelativeIncident  — "今天 14:23" / "Today 14:23"  (Incident.time)
+//
+// Times older than a week fall back to a numeric date — language-neutral.
 
-const RE_SECONDS = /^(\d+)\s*秒前$/;
-const RE_MINUTES = /^(\d+)\s*分钟前$/;
-const RE_HOURS = /^(\d+)\s*小时前$/;
-const RE_DAYS = /^(\d+)\s*天前$/;
-const RE_TODAY_AT = /^今天\s+(\d{1,2}:\d{2})$/;
-const RE_YESTERDAY_AT = /^昨天\s+(\d{1,2}:\d{2})$/;
+// Service.regionGroup hints whether the canonical wall-clock for a service
+// is China (Asia/Shanghai) or global. We render incident times in the
+// viewer's locale-appropriate zone: Shanghai for zh, viewer-local for en.
+const SHANGHAI = "Asia/Shanghai";
 
-export function formatRelative(raw: string, t: T): string {
-  if (!raw || raw === "—") return t("time.unknown");
-  let m = RE_SECONDS.exec(raw);
-  if (m) return t("time.seconds", { n: m[1] });
-  m = RE_MINUTES.exec(raw);
-  if (m) return t("time.minutes", { n: m[1] });
-  m = RE_HOURS.exec(raw);
-  if (m) return t("time.hours", { n: m[1] });
-  if (raw === "昨天") return t("time.yesterday");
-  m = RE_DAYS.exec(raw);
-  if (m) return t("time.days", { n: m[1] });
-  m = RE_TODAY_AT.exec(raw);
-  if (m) return t("time.todayAt", { time: m[1] });
-  m = RE_YESTERDAY_AT.exec(raw);
-  if (m) return t("time.yesterdayAt", { time: m[1] });
-  return raw;
+type Parts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+
+function partsInTz(date: Date, tz: string | undefined): Parts {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    ...(tz ? { timeZone: tz } : {}),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const out: Partial<Parts> = {};
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type === "year") out.year = Number(part.value);
+    else if (part.type === "month") out.month = Number(part.value);
+    else if (part.type === "day") out.day = Number(part.value);
+    else if (part.type === "hour") out.hour = Number(part.value);
+    else if (part.type === "minute") out.minute = Number(part.value);
+  }
+  return out as Parts;
+}
+
+export function formatRelative(
+  iso: string | null,
+  t: T,
+  now: Date = new Date(),
+): string {
+  if (!iso) return t("time.unknown");
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return t("time.unknown");
+
+  const deltaSec = Math.max(0, Math.floor((now.getTime() - parsed) / 1000));
+  if (deltaSec < 60) return t("time.seconds", { n: deltaSec });
+  const min = Math.floor(deltaSec / 60);
+  if (min < 60) return t("time.minutes", { n: min });
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return t("time.hours", { n: hr });
+  const day = Math.floor(hr / 24);
+  if (day === 1) return t("time.yesterday");
+  if (day < 7) return t("time.days", { n: day });
+
+  // Older than a week: locale-neutral MM-DD (or YYYY-MM-DD if a different year).
+  const tz = localeTzForFormatRelative();
+  const t2 = partsInTz(new Date(parsed), tz);
+  const tn = partsInTz(now, tz);
+  const mo = String(t2.month).padStart(2, "0");
+  const dd = String(t2.day).padStart(2, "0");
+  if (t2.year !== tn.year) return `${t2.year}-${mo}-${dd}`;
+  return `${mo}-${dd}`;
+}
+
+// Default zone for the "older than a week" fallback. Hard to thread a locale
+// through every caller; Shanghai is the right default for this site's audience
+// and matches the previous behavior.
+function localeTzForFormatRelative(): string {
+  return SHANGHAI;
+}
+
+export function formatRelativeIncident(
+  iso: string,
+  t: T,
+  now: Date = new Date(),
+): string {
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return iso;
+  const date = new Date(parsed);
+
+  // Render the wall clock in Shanghai so "今天" / "Today" lines up with the
+  // local newsroom-style display the prototype was designed around.
+  const tParts = partsInTz(date, SHANGHAI);
+  const nowParts = partsInTz(now, SHANGHAI);
+  const hh = String(tParts.hour).padStart(2, "0");
+  const mm = String(tParts.minute).padStart(2, "0");
+
+  // Day diff from Shanghai calendar (not raw ms — that mis-groups across
+  // midnight when the user crosses a UTC day boundary).
+  const startOfNow = Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day);
+  const startOfT = Date.UTC(tParts.year, tParts.month - 1, tParts.day);
+  const dayDiff = Math.round((startOfNow - startOfT) / 86_400_000);
+
+  if (dayDiff === 0) return t("time.todayAt", { time: `${hh}:${mm}` });
+  if (dayDiff === 1) return t("time.yesterdayAt", { time: `${hh}:${mm}` });
+  const mo = String(tParts.month).padStart(2, "0");
+  const dd = String(tParts.day).padStart(2, "0");
+  if (tParts.year !== nowParts.year) {
+    return `${tParts.year}-${mo}-${dd} ${hh}:${mm}`;
+  }
+  return `${mo}-${dd} ${hh}:${mm}`;
+}
+
+// Locale-aware uptime percentage. Worker used to return "99.34%" directly;
+// the API now returns a fraction so we can drop the trailing decimal in EN
+// or whatever else makes sense per locale.
+export function formatUptimePct(value: number | null, t: T): string {
+  if (value === null || !Number.isFinite(value)) return t("time.unknown");
+  return `${(value * 100).toFixed(2)}%`;
 }

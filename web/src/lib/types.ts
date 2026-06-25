@@ -72,9 +72,11 @@ export type Service = {
   priority: "P0" | "P1" | "P2";
   status: NormalizedStatus;
   pattern: UptimePattern;
-  uptime7d: string;
-  uptime90d: string;
-  lastUpdate: string;
+  // Fraction (0..1) or null when no known samples yet.
+  uptime7d: number | null;
+  uptime90d: number | null;
+  // ISO-8601 of the last status check, or null if never polled.
+  lastUpdate: string | null;
   brandColor: string;
   avatarText: "#fff" | "#1A1A1A";
   initial: string;
@@ -86,6 +88,7 @@ export type Service = {
 
 export type Incident = {
   service: string;
+  // ISO-8601 timestamp.
   time: string;
   desc: string;
   incStatus: IncidentStatus;

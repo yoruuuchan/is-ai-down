@@ -1,6 +1,12 @@
 "use client";
 
-import { CATEGORY_SLUG, formatRelative, useProbeLabel, useT } from "@/lib/i18n";
+import {
+  CATEGORY_SLUG,
+  formatRelative,
+  formatUptimePct,
+  useProbeLabel,
+  useT,
+} from "@/lib/i18n";
 import { endpointDot, makeUptimeGradient } from "@/lib/status";
 import type { Service } from "@/lib/types";
 import { StatusPill } from "./StatusPill";
@@ -129,7 +135,7 @@ export function ServiceCard({ service, onClick }: Props) {
               color: "var(--ink-1)",
             }}
           >
-            {service.uptime7d}
+            {formatUptimePct(service.uptime7d, t)}
           </span>
         </div>
         <div

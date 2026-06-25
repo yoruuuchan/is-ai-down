@@ -95,26 +95,13 @@ export function compareByStatus(
   return statusOrder[a] - statusOrder[b];
 }
 
-// Reverses Worker `formatRelativeZh()` back into seconds for client-side
-// "recent" sorting. "MM-DD" and "—" return +∞ so they sink to the bottom —
-// good enough without round-tripping a raw timestamp through the API.
-const SECONDS_AGO_RE = /^(\d+)\s*秒前$/;
-const MINUTES_AGO_RE = /^(\d+)\s*分钟前$/;
-const HOURS_AGO_RE = /^(\d+)\s*小时前$/;
-const DAYS_AGO_RE = /^(\d+)\s*天前$/;
-
-export function parseLastUpdateAgo(s: string): number {
-  if (!s || s === "—") return Number.POSITIVE_INFINITY;
-  let m = SECONDS_AGO_RE.exec(s);
-  if (m) return Number(m[1]);
-  m = MINUTES_AGO_RE.exec(s);
-  if (m) return Number(m[1]) * 60;
-  m = HOURS_AGO_RE.exec(s);
-  if (m) return Number(m[1]) * 3600;
-  if (s === "昨天") return 86_400;
-  m = DAYS_AGO_RE.exec(s);
-  if (m) return Number(m[1]) * 86_400;
-  return Number.POSITIVE_INFINITY;
+// Seconds since the given ISO timestamp, or +∞ if missing/unparseable. Used
+// for client-side "recent" sorting; null/invalid sinks to the bottom.
+export function secondsSince(iso: string | null, now: Date = new Date()): number {
+  if (!iso) return Number.POSITIVE_INFINITY;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, Math.floor((now.getTime() - t) / 1000));
 }
 
 // Pattern → segment array → segment runs → linear-gradient CSS.

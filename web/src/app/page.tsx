@@ -19,7 +19,7 @@ import { SkeletonGrid } from "@/components/SkeletonGrid";
 import { StatsBar } from "@/components/StatsBar";
 
 import { fetchIncidents, fetchServices } from "@/lib/api";
-import { compareByStatus, parseLastUpdateAgo } from "@/lib/status";
+import { compareByStatus, secondsSince } from "@/lib/status";
 import type { Incident, NormalizedStatus, Service } from "@/lib/types";
 
 type DemoState = "live" | "loading" | "error" | "first_load";
@@ -164,8 +164,8 @@ export default function HomePage() {
     }
     if (sortBy === "recent") {
       return base.sort((a, b) => {
-        const sa = parseLastUpdateAgo(a.lastUpdate);
-        const sb = parseLastUpdateAgo(b.lastUpdate);
+        const sa = secondsSince(a.lastUpdate);
+        const sb = secondsSince(b.lastUpdate);
         if (sa !== sb) return sa - sb;
         return a.name.localeCompare(b.name, "zh-Hans-CN");
       });

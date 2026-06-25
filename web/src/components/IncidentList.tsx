@@ -1,6 +1,6 @@
 "use client";
 
-import { formatRelative, useT } from "@/lib/i18n";
+import { formatRelativeIncident, useT } from "@/lib/i18n";
 import { incidentSeverityDot, incStatusStyle } from "@/lib/status";
 import type { Incident } from "@/lib/types";
 
@@ -81,7 +81,7 @@ export function IncidentList({ incidents, todayEvents }: Props) {
                   width: 88,
                 }}
               >
-                {formatRelative(inc.time, t)}
+                {formatRelativeIncident(inc.time, t)}
               </span>
               <span
                 style={{

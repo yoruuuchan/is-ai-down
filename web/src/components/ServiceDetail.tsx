@@ -1,6 +1,6 @@
 "use client";
 
-import { CATEGORY_SLUG, useProbeLabel, useT } from "@/lib/i18n";
+import { CATEGORY_SLUG, formatUptimePct, useProbeLabel, useT } from "@/lib/i18n";
 import {
   endpointDot,
   formatProbeHttpStatus,
@@ -290,7 +290,7 @@ export function ServiceDetail({ service, onClose }: Props) {
                   color: "var(--ink-1)",
                 }}
               >
-                {service.uptime7d}
+                {formatUptimePct(service.uptime7d, t)}
               </span>
             </div>
           </div>
@@ -316,7 +316,7 @@ export function ServiceDetail({ service, onClose }: Props) {
                   marginTop: 2,
                 }}
               >
-                {service.uptime90d}
+                {formatUptimePct(service.uptime90d, t)}
               </div>
             </div>
             <div>
