@@ -223,16 +223,35 @@ async function writePollResults(
   results: ServicePollResult[],
   checkedAt: string
 ) {
+  if (results.length === 0) return;
+
+  const snapshotStmt = db.prepare(
+    `
+    INSERT INTO status_snapshots
+      (service_id, status, pattern_hint, uptime_7d, uptime_90d, endpoints_json, checked_at, source_raw)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `
+  );
+  const incidentStmt = db.prepare(
+    `
+    INSERT INTO incidents
+      (id, service_id, title, inc_status, severity, started_at, updated_at, resolved_at, url, summary)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      inc_status = excluded.inc_status,
+      severity = excluded.severity,
+      updated_at = excluded.updated_at,
+      resolved_at = excluded.resolved_at,
+      url = excluded.url,
+      summary = excluded.summary
+    `
+  );
+
+  const statements: D1PreparedStatement[] = [];
   for (const result of results) {
-    await db
-      .prepare(
-        `
-        INSERT INTO status_snapshots
-          (service_id, status, pattern_hint, uptime_7d, uptime_90d, endpoints_json, checked_at, source_raw)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
+    statements.push(
+      snapshotStmt.bind(
         result.serviceId,
         result.status,
         result.pattern,
@@ -242,44 +261,28 @@ async function writePollResults(
         checkedAt,
         result.sourceRaw
       )
-      .run();
-
+    );
     for (const incident of result.incidents) {
-      await upsertIncident(db, incident);
+      statements.push(
+        incidentStmt.bind(
+          incident.id,
+          incident.serviceId,
+          incident.title,
+          incident.status,
+          incident.severity,
+          incident.startedAt,
+          incident.updatedAt,
+          incident.resolvedAt,
+          incident.url,
+          incident.summary
+        )
+      );
     }
   }
-}
 
-async function upsertIncident(db: D1Database, incident: IncidentUpsert) {
-  await db
-    .prepare(
-      `
-      INSERT INTO incidents
-        (id, service_id, title, inc_status, severity, started_at, updated_at, resolved_at, url, summary)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        title = excluded.title,
-        inc_status = excluded.inc_status,
-        severity = excluded.severity,
-        updated_at = excluded.updated_at,
-        resolved_at = excluded.resolved_at,
-        url = excluded.url,
-        summary = excluded.summary
-      `
-    )
-    .bind(
-      incident.id,
-      incident.serviceId,
-      incident.title,
-      incident.status,
-      incident.severity,
-      incident.startedAt,
-      incident.updatedAt,
-      incident.resolvedAt,
-      incident.url,
-      incident.summary
-    )
-    .run();
+  // One RPC instead of one per row — ~10 services × (1 snapshot + 0–5
+  // incidents) used to mean 10–60 sequential D1 round trips per cron tick.
+  await db.batch(statements);
 }
 
 async function cleanupOldRows(db: D1Database) {
