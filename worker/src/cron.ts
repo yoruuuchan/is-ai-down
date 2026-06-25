@@ -137,7 +137,6 @@ async function runScheduledPoll(
     .run()
     .catch(() => {});
 
-  await cleanupSeedRows(env.DB);
   const allServices = await loadServices(env.DB);
   // Stagger services across POLL_BATCHES ticks to stay under the
   // 50-subrequest-per-invocation Worker limit.
@@ -333,12 +332,13 @@ async function cleanupOldRows(db: D1Database) {
     // window of data (one extra day of cushion for timezone edges).
     db
       .prepare(`DELETE FROM daily_uptime WHERE day < date('now', '+8 hours', '-91 days')`),
+    // Seed leftover: incident rows with id starting "seed-" exist only from
+    // the initial migration. Real upstream incident ids never start with that
+    // prefix (they're upstream:uuid, generated-hex, or platform-specific
+    // shapes). Bounded by an age check so this can't run away later.
+    db
+      .prepare(`DELETE FROM incidents WHERE id LIKE 'seed-%' AND started_at < datetime('now', '-1 day')`),
   ]);
-}
-
-async function cleanupSeedRows(db: D1Database) {
-  await db.prepare(`DELETE FROM status_snapshots WHERE source_raw IS NULL`).run();
-  await db.prepare(`DELETE FROM incidents WHERE id LIKE 'seed-%'`).run();
 }
 
 // Recomputed once per hour from daily_uptime. Reads ~91 rows per service
@@ -846,7 +846,9 @@ async function fetchInstatus(service: ServiceRow): Promise<StatuspageResult | nu
           id: `${service.id}:in-${i.id ?? i.name}`,
           serviceId: service.id,
           title: i.name!,
-          status: mapInstatusIncidentStatus(i.status),
+          // A non-null `resolved` field overrides upstream status — some
+          // Instatus pages keep status="investigating" on resolved entries.
+          status: i.resolved ? "resolved" as const : mapInstatusIncidentStatus(i.status),
           severity: mapInstatusIncidentImpact(i.impact),
           startedAt: i.started ?? new Date().toISOString(),
           updatedAt: i.started ?? new Date().toISOString(),
@@ -941,7 +943,9 @@ async function fetchOnlineOrNot(service: ServiceRow): Promise<StatuspageResult |
         id: `${service.id}:oon-${i.id ?? i.title}`,
         serviceId: service.id,
         title: i.title!,
-        status: mapInstatusIncidentStatus(i.status),
+        // Same defensive override as the Instatus path: a non-null `ended`
+        // beats whatever upstream status string says.
+        status: i.ended ? "resolved" as const : mapInstatusIncidentStatus(i.status),
         severity: mapOnlineOrNotSeverity(i.impact),
         startedAt: i.started ?? new Date().toISOString(),
         updatedAt: i.started ?? new Date().toISOString(),
@@ -1363,7 +1367,11 @@ async function mapLimit<T, R>(
   limit: number,
   fn: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
+  // Callers (pollService, probeEndpoint) already convert errors to
+  // structured results, so this catch is defense-in-depth: an unexpected
+  // throw from one worker shouldn't take down the whole tick and leave
+  // half the queue's in-flight fetches dangling.
+  const results = new Array<R | null>(items.length);
   let next = 0;
 
   await Promise.all(
@@ -1371,12 +1379,20 @@ async function mapLimit<T, R>(
       while (next < items.length) {
         const index = next;
         next += 1;
-        results[index] = await fn(items[index], index);
+        try {
+          results[index] = await fn(items[index], index);
+        } catch (err) {
+          console.warn(
+            "mapLimit worker threw",
+            err instanceof Error ? err.message : String(err)
+          );
+          results[index] = null;
+        }
       }
     })
   );
 
-  return results;
+  return results.filter((r): r is R => r !== null);
 }
 
 function stableIncidentId(title: string, startedAt: string): string {

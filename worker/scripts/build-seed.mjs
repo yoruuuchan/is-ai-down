@@ -3,14 +3,12 @@
 // Run: node scripts/build-seed.mjs
 //
 // Why a generator and not a hand-written .sql?
-//   - The frontend's seed lives in web/src/lib/services.ts; this script keeps
-//     the worker seed in lock-step structurally (same ids, same brand colors,
-//     same status enum values, etc.) without paying the cost of a TS importer.
+//   - Brand colors, ids, status enum values, etc. are easier to keep
+//     consistent across services in a JS literal than in SQL.
 //   - SQLite datetime('now', '-N minutes') expressions mean the "last update"
 //     timestamps stay realistic no matter when the seed is replayed.
 //
-// To keep both lists in sync after editing services.ts, edit SERVICES below
-// to match, then re-run this script and re-apply migrations/0002_seed.sql.
+// Edit SERVICES below, run this script, then re-apply migrations/0002_seed.sql.
 
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
