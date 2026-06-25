@@ -7,7 +7,9 @@ type IncidentsResponse = { incidents: Incident[]; todayEvents: number };
 type FeedbackRequest = { email: string; message: string; _trap: string };
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { signal, cache: "no-store" });
+  // Let the Cache-Control header from /api/* decide freshness — the worker
+  // sets a 15s edge cache to collapse repeated visitor refreshes.
+  const res = await fetch(`${BASE}${path}`, { signal });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return (await res.json()) as T;
 }

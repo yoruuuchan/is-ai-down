@@ -103,8 +103,14 @@ async function sendFeedbackEmail(
 
 app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
+// Edge-cache read endpoints for 15s. Cron polls upstream every minute, so a
+// 15s TTL keeps the displayed data fresh while collapsing the 60s client
+// refresh into roughly 4 origin hits per minute instead of one per visitor.
+const READ_CACHE_HEADER = "public, max-age=15, s-maxage=15";
+
 app.get("/api/services", async (c) => {
   const services = await getServicesWithLatestStatus(c.env.DB);
+  c.header("Cache-Control", READ_CACHE_HEADER);
   return c.json({ services, fetched_at: new Date().toISOString() });
 });
 
@@ -114,11 +120,13 @@ app.get("/api/incidents", async (c) => {
     getRecentIncidents(c.env.DB, limit),
     countTodayEvents(c.env.DB),
   ]);
+  c.header("Cache-Control", READ_CACHE_HEADER);
   return c.json({ incidents, todayEvents });
 });
 
 app.get("/api/stats", async (c) => {
   const stats = await getStats(c.env.DB);
+  c.header("Cache-Control", READ_CACHE_HEADER);
   return c.json(stats);
 });
 
