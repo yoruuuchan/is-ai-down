@@ -18,10 +18,10 @@ const SERVICE_CONCURRENCY = 6;
 // 14 days gives us enough window for ad-hoc debugging without 5M+ rows.
 const SNAPSHOT_RETENTION_DAYS = 14;
 const CRON_RUNS_RETENTION_DAYS = 30;
-// Cloudflare Workers caps fetch subrequests at 50 per invocation. With ~37
-// services × (1 statuspage + 2–3 endpoints) we'd hit 150+ per tick. Stagger
-// across N ticks so each invocation polls ~37/N services (≤ ~5 fetches each).
-const POLL_BATCHES = 4;
+// Cloudflare Workers caps fetch subrequests at 50 per invocation. With 44
+// services × (1 statuspage + 2–4 endpoints) we'd hit 150+ per tick. Stagger
+// across N ticks so each invocation keeps room for redirects and fallback URLs.
+const POLL_BATCHES = 6;
 
 type ServiceRow = {
   id: string;

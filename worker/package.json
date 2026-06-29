@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:local": "wrangler d1 execute ai-status-board --local --file=./migrations/0001_init.sql",
-    "db:remote": "wrangler d1 execute ai-status-board --remote --file=./migrations/0001_init.sql",
+    "db:local": "npm run db:schema:local",
+    "db:remote": "npm run db:schema:remote",
+    "db:schema:local": "wrangler d1 execute ai-status-board --local --file=./migrations/0001_init.sql && wrangler d1 execute ai-status-board --local --file=./migrations/0003_feedback.sql && wrangler d1 execute ai-status-board --local --file=./migrations/0004_uptime_aggregates.sql",
+    "db:schema:remote": "wrangler d1 execute ai-status-board --remote --file=./migrations/0001_init.sql && wrangler d1 execute ai-status-board --remote --file=./migrations/0003_feedback.sql && wrangler d1 execute ai-status-board --remote --file=./migrations/0004_uptime_aggregates.sql",
+    "predb:seed:local": "npm run db:schema:local",
+    "predb:seed:remote": "npm run db:schema:remote",
     "db:seed:local": "wrangler d1 execute ai-status-board --local --file=./migrations/0002_seed.sql",
     "db:seed:remote": "wrangler d1 execute ai-status-board --remote --file=./migrations/0002_seed.sql"
   },

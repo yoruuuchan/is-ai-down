@@ -43,11 +43,10 @@ CREATE TABLE IF NOT EXISTS service_uptime (
 );
 
 -- ─── Backfill from existing status_snapshots ────────────────────────────────
--- One-shot: build daily_uptime + service_uptime from history we already have
--- so /api/services keeps returning useful uptime numbers after the cron
--- switches to the new write path. Re-running this migration is harmless
--- because each statement is idempotent (DELETE+INSERT / INSERT OR REPLACE).
-DELETE FROM daily_uptime;
+-- Backfill daily_uptime + service_uptime from history we already have so
+-- /api/services keeps returning useful uptime numbers after the cron switches
+-- to the new write path. This is safe to re-run: rows covered by current
+-- status_snapshots are refreshed, and older daily_uptime rows are preserved.
 INSERT INTO daily_uptime
   (service_id, day, total_n, known_n,
    n_operational, n_degraded, n_partial_outage,
@@ -64,17 +63,26 @@ SELECT
   SUM(CASE WHEN status = 'maintenance'    THEN 1 ELSE 0 END),
   SUM(CASE WHEN status = 'unknown'        THEN 1 ELSE 0 END)
 FROM status_snapshots
-GROUP BY service_id, date(checked_at, '+8 hours');
+WHERE true
+GROUP BY service_id, date(checked_at, '+8 hours')
+ON CONFLICT(service_id, day) DO UPDATE SET
+  total_n = excluded.total_n,
+  known_n = excluded.known_n,
+  n_operational = excluded.n_operational,
+  n_degraded = excluded.n_degraded,
+  n_partial_outage = excluded.n_partial_outage,
+  n_major_outage = excluded.n_major_outage,
+  n_maintenance = excluded.n_maintenance,
+  n_unknown = excluded.n_unknown;
 
--- Seed service_uptime with the first rollup so the API returns
--- non-null values immediately after deploy. The cron's hourly job will
--- keep this fresh after that.
+-- Seed or refresh service_uptime with the latest rollup so the API returns
+-- non-null values immediately after deploy. The cron's hourly job will keep
+-- this fresh after that.
 --
 -- Formula stays close to the previous computeUptime: operational +
 -- maintenance + degraded count fully; partial_outage half; major_outage
 -- and unknown drop out of the numerator. Unknown also drops out of the
 -- denominator so all-unknown services return null (vs misleading 0%).
-DELETE FROM service_uptime;
 INSERT INTO service_uptime (service_id, uptime_7d, uptime_90d, pattern_hint, refreshed_at)
 SELECT
   s.id,
@@ -102,4 +110,10 @@ SELECT
   -- first hourly tick; backfill with 'unknown' so the column is non-empty.
   'unknown',
   datetime('now')
-FROM services s;
+FROM services s
+WHERE true
+ON CONFLICT(service_id) DO UPDATE SET
+  uptime_7d = excluded.uptime_7d,
+  uptime_90d = excluded.uptime_90d,
+  pattern_hint = excluded.pattern_hint,
+  refreshed_at = excluded.refreshed_at;

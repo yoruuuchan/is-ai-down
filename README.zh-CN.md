@@ -44,6 +44,7 @@ Cloudflare D1
 ```bash
 cd web
 npm install
+cp .env.example .env.development
 npm run dev
 ```
 
@@ -54,10 +55,11 @@ npm run dev
 ```bash
 cd worker
 npm install
+npm run db:seed:local
 npx wrangler dev --port 8788
 ```
 
-后端运行在 http://localhost:8788。本地开发时，`web/.env.development` 会把前端 API 指向这个 Worker 端口。
+后端运行在 http://localhost:8788。`npm run db:seed:local` 会先应用本地 schema migrations，然后填充本地 D1 数据库。
 
 ## 数据来源
 

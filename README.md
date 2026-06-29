@@ -44,6 +44,7 @@ Frontend:
 ```bash
 cd web
 npm install
+cp .env.example .env.development
 npm run dev
 ```
 
@@ -54,10 +55,11 @@ Backend:
 ```bash
 cd worker
 npm install
+npm run db:seed:local
 npx wrangler dev --port 8788
 ```
 
-The backend runs on http://localhost:8788. In local development, `web/.env.development` points the frontend to this Worker port.
+The backend runs on http://localhost:8788. `npm run db:seed:local` first applies the local schema migrations, then seeds the local D1 database.
 
 ## Data sources
 

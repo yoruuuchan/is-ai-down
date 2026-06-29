@@ -17,7 +17,29 @@ export type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.use("/api/*", cors({ origin: "*", maxAge: 300 }));
+const READ_API_CORS = cors({
+  origin: "*",
+  allowMethods: ["GET", "HEAD", "OPTIONS"],
+  maxAge: 300,
+});
+const FEEDBACK_ALLOWED_ORIGINS = new Set([
+  "https://is-ai-down.yoru-and-akari.dev",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]);
+const FEEDBACK_CORS = cors({
+  origin: (origin) =>
+    FEEDBACK_ALLOWED_ORIGINS.has(origin) ? origin : undefined,
+  allowMethods: ["POST", "OPTIONS"],
+  allowHeaders: ["Content-Type"],
+  maxAge: 300,
+});
+
+app.use("/api/health", READ_API_CORS);
+app.use("/api/services", READ_API_CORS);
+app.use("/api/incidents", READ_API_CORS);
+app.use("/api/stats", READ_API_CORS);
+app.use("/api/feedback", FEEDBACK_CORS);
 
 const DISPOSABLE_EMAIL_MARKERS = [
   "10minutemail",
@@ -57,6 +79,13 @@ function isValidEmail(email: string): boolean {
 function isDisposableEmail(email: string): boolean {
   const domain = email.split("@").at(-1)?.toLowerCase() ?? "";
   return DISPOSABLE_EMAIL_MARKERS.some((marker) => domain.includes(marker));
+}
+
+function parseIncidentLimit(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return 50;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 50;
+  return Math.min(Math.max(Math.trunc(n), 1), 200);
 }
 
 async function countFeedbackFromIp(
@@ -115,7 +144,7 @@ app.get("/api/services", async (c) => {
 });
 
 app.get("/api/incidents", async (c) => {
-  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+  const limit = parseIncidentLimit(c.req.query("limit"));
   const [incidents, todayEvents] = await Promise.all([
     getRecentIncidents(c.env.DB, limit),
     countTodayEvents(c.env.DB),
