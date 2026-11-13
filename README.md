@@ -2,24 +2,26 @@
 
 [中文](./README.zh-CN.md)
 
-A public AI service status board. It aggregates official public status pages and lightweight public-page reachability probes, so users can quickly tell whether common AI services are having visible incidents.
+ChatGPT won't load. Is it down, or is it just you? This page answers that for the common AI services in one place.
 
 Live: https://is-ai-down.yoru-and-akari.dev
 
+![The board: totals by status, category filters, and one card per service with its 7-day availability](docs/board.png)
+
 ## What it does
 
-- Aggregates official status pages from AI products and infrastructure providers.
-- Runs public-page reachability probes for services without a dedicated status page.
-- Shows normalized service status, recent incidents, and public endpoint health.
-- Provides a small feedback form for reporting missing services or suspicious status results.
+- Pulls in the official status pages of AI products and the infrastructure behind them.
+- For services without their own status page, checks whether their public pages are reachable.
+- Shows every service's status in the same format, along with recent incidents and the health of public endpoints.
+- Has a small feedback form, so you can report a missing service or a result that looks wrong.
 
-## What it is not
+## What a green light means
 
-This is not first-party telemetry from AI providers. A green status means the monitored public source or endpoint looked healthy at the time of the check. It does not guarantee that login, billing, model inference, regional access, or every product feature is working.
+The data does not come from inside the AI companies. Green means the public status page or endpoint looked healthy when it was checked. Login, billing, model responses, access from your region, or any single feature could still be broken.
 
-This is a personal public project provided as-is. There is no SLA, operational guarantee, or legal guarantee.
+This is a personal project, provided as is. There is no SLA and no operational or legal guarantee.
 
-## Architecture
+## How it's built
 
 ```text
 Browser
@@ -35,9 +37,9 @@ Cloudflare Worker
 Cloudflare D1
 ```
 
-The frontend is a Next.js 16 static export served by Cloudflare Worker Assets. The backend is a Cloudflare Worker with scheduled polling and a D1 database.
+The frontend is a Next.js 16 static export, served by Cloudflare Worker Assets. The backend is a Cloudflare Worker that polls on a schedule and serves the API. Data lives in a Cloudflare D1 database.
 
-## Local development
+## Run it locally
 
 Frontend:
 
@@ -47,7 +49,7 @@ npm install
 npm run dev
 ```
 
-The frontend runs on http://localhost:3000.
+It runs on http://localhost:3000.
 
 Backend:
 
@@ -57,20 +59,20 @@ npm install
 npx wrangler dev --port 8788
 ```
 
-The backend runs on http://localhost:8788. In local development, `web/.env.development` points the frontend to this Worker port.
+It runs on http://localhost:8788. In local development, `web/.env.development` points the frontend at this Worker port.
 
-## Data sources
+## Where the data comes from
 
-The project uses official public status pages where available. For products without a meaningful standalone status page, it falls back to public-page probes. The data is normalized for display and should be treated as a public signal, not as a guarantee of product availability.
+Official public status pages come first. When a product has no standalone status page worth reading, the board probes its public pages instead. Everything is put into one format for display. Treat it as a public signal, not a promise that a product works.
 
 ## Feedback
 
-Use the feedback form on the live site, or open a GitHub Issue after this repository is public.
+Use the feedback form on the live site, or open a GitHub Issue.
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0. See [LICENSE](./LICENSE).
+GNU Affero General Public License v3.0. See [LICENSE](./LICENSE).
 
 ## Acknowledgements
 
-Built collaboratively with Claude and Codex.
+Built together with Claude and Codex.
